@@ -86,6 +86,53 @@ This application provides an easy-to-use interface for tracking student attendan
   - `Fourth Stage/`: Fourth year student data
 - Logo files: University and Ministry of Higher Education logos
 
+## Directory Tree
+
+```
+.
+│   .gitignore
+│   app.py
+│   README.md
+│   ministry of higher education logo.png
+│   university_logo.png
+│
+├───Students Databases
+│   │   First.db (Database file)
+│   │   Network_First_Evening_GA.xlsx (Excel template)
+│
+└───Stages
+    ├───First Stage
+    │   ├───Evening
+    │   │   ├───GA
+    │   │   └───GB
+    │   └───Morning
+    │       ├───GA
+    │       └───GB
+    ├───Fourth Stage
+    │   ├───Evening
+    │   │   ├───GA
+    │   │   └───GB
+    │   └───Morning
+    │       ├───GA
+    │       └───GB
+    ├───Second Stage
+    │   ├───Evening
+    │   │   ├───GA
+    │   │   └───GB
+    │   └───Morning
+    │       ├───GA
+    │       └───GB
+    └───Third Stage
+        ├───Evening
+        │   ├───GA
+        │   └───GB
+        └───Morning
+            ├───GA
+            └───GB
+```
+
+This structure organizes student data by Stage (year), Study type (Morning/Evening), and Group (GA/GB). The application uses this organization to manage and filter attendance records.
+
 ## Database Schema
 
 ### Students Table
