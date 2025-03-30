@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Development environment specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database files
+# Uncomment the following line if you don't want to include database files
+# *.db
+
+# Local configuration
+instance/
+.env
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Exported attendance data
+# Uncomment if you don't want to track exported attendance data
+# *.xlsx 
