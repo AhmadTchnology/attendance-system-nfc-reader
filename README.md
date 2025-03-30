@@ -84,7 +84,7 @@ This application provides an easy-to-use interface for tracking student attendan
   - `Second Stage/`: Second year student data
   - `Third Stage/`: Third year student data
   - `Fourth Stage/`: Fourth year student data
-- Logo files: University and Ministry of Higher Education logos
+- Logo files: Any Image You Want
 
 ## Directory Tree
 
@@ -93,12 +93,11 @@ This application provides an easy-to-use interface for tracking student attendan
 │   .gitignore
 │   app.py
 │   README.md
-│   ministry of higher education logo.png
-│   university_logo.png
+│   Any_Image_You_Want.png
 │
 ├───Students Databases
 │   │   First.db (Database file)
-│   │   Network_First_Evening_GA.xlsx (Excel template)
+│   │   Any_Excel_File_You_Want.xlsx (Excel template)
 │
 └───Stages
     ├───First Stage
@@ -131,7 +130,7 @@ This application provides an easy-to-use interface for tracking student attendan
             └───GB
 ```
 
-This structure organizes student data by Stage (year), Study type (Morning/Evening), and Group (GA/GB). The application uses this organization to manage and filter attendance records.
+This structure organizes student data by Stage (year), Study type (Morning/Evening), and Group (GA/GB). The application uses this organization to manage and filter attendance records , You can change the structure as you want.
 
 ## Database Schema
 
