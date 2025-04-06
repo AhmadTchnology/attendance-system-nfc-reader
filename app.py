@@ -11,9 +11,11 @@ import sys
 def resource_path(relative_path):
     """Get the absolute path to a resource, works for dev and PyInstaller."""
     try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
+    
     return os.path.join(base_path, relative_path)
 
 # Global variables
@@ -87,8 +89,11 @@ def populate_db_dropdown():
     """Populate the dropdown with .db files from the 'Students Databases' folder."""
     db_files = []
     try:
+        # Ensure the folder exists
         if not os.path.exists("Students Databases"):
             os.makedirs("Students Databases")  # Create the folder if it doesn't exist
+            messagebox.showinfo("Info", "Created 'Students Databases' folder.")
+        
         db_files = [f for f in os.listdir("Students Databases") if f.endswith(".db")]
     except Exception as e:
         print(f"Error reading 'Students Databases' folder: {e}")
@@ -96,7 +101,7 @@ def populate_db_dropdown():
     if db_files:
         db_dropdown.current(0)  # Select the first database by default
     else:
-        messagebox.showwarning("Warning", "No .db files found in 'Students Databases' folder.")
+        messagebox.showinfo("Information", "No database files found. Please create a new database.")
 
 def create_db():
     """Create a new .db file."""
@@ -134,7 +139,7 @@ def add_student():
     name = entry_name.get().strip()
     major = entry_major.get().strip()
     stage = entry_stage.get().strip()
-    study = entry_study.get().strip()
+    study = entry_study.get().strip()  # This will get the selected value from the combobox
     group = entry_group.get().strip()
     if not student_id or not name or not major or not stage or not study or not group:
         messagebox.showwarning("Input Error", "All fields are required.")
@@ -148,6 +153,8 @@ def add_student():
         conn.commit()
         messagebox.showinfo("Success", "Student added successfully.")
         clear_entries()
+        # Reset combobox to default selection after clearing
+        entry_study.current(0)
     except sqlite3.IntegrityError:
         messagebox.showerror("Error", "Student ID already exists.")
 
@@ -157,7 +164,8 @@ def clear_entries():
     entry_name.delete(0, tk.END)
     entry_major.delete(0, tk.END)
     entry_stage.delete(0, tk.END)
-    entry_study.delete(0, tk.END)
+    # For combobox, we don't delete, we set it back to a default value
+    entry_study.current(0)  # Reset to Morning
     entry_group.delete(0, tk.END)
 
 def import_students_from_excel():
@@ -218,9 +226,21 @@ def record_attendance(event=None):
         first_stage = student[3]
         first_study = student[4]
         first_group = student[5]
-        messagebox.showinfo("Info", f"Filters set to: Major={first_major}, Stage={first_stage}, Study={first_study}, Group={first_group}")
-    elif student[2] != first_major or student[3] != first_stage or student[4] != first_study or student[5] != first_group:
-        messagebox.showwarning("Filter Mismatch", f"Attendance is currently restricted to students with:\nMajor={first_major}, Stage={first_stage}, Study={first_study}, Group={first_group}.")
+        
+        # More descriptive message when using Morning or Hosted study types
+        if first_study == "Morning" or first_study == "Hosted":
+            messagebox.showinfo("Info", f"Filters set to: Major={first_major}, Stage={first_stage}, Study={first_study} (will include both Morning and Hosted students), Group={first_group}")
+        else:
+            messagebox.showinfo("Info", f"Filters set to: Major={first_major}, Stage={first_stage}, Study={first_study}, Group={first_group}")
+    elif student[2] != first_major or student[3] != first_stage or student[5] != first_group:
+        # Major, stage, and group must match exactly
+        messagebox.showwarning("Filter Mismatch", f"Attendance is currently restricted to students with:\nMajor={first_major}, Stage={first_stage}, Group={first_group}.")
+        return
+    elif not ((student[4] == first_study) or 
+              (first_study == "Morning" and student[4] == "Hosted") or 
+              (first_study == "Hosted" and student[4] == "Morning")):
+        # Study must be either the same or a compatible type (Morning or Hosted)
+        messagebox.showwarning("Filter Mismatch", f"Attendance is currently restricted to students with:\nStudy={first_study} or compatible study types.")
         return
 
     # Check if the student has already been marked as attended today
@@ -255,15 +275,32 @@ def export_attendance():
         messagebox.showwarning("Warning", "No attendance recorded yet. Cannot determine the filters.")
         return
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT s.name, s.major, s.stage, s.study, s.group_name, a.timestamp, CASE WHEN a.attended = 1 THEN 'Yes' ELSE 'No' END AS attended
-        FROM students s
-        LEFT JOIN attendance a ON s.student_id = a.student_id
-        WHERE s.major = ? AND s.stage = ? AND s.study = ? AND s.group_name = ?
-    """, (first_major, first_stage, first_study, first_group))
+    
+    # Build the where clause based on the study type
+    if first_study == "Morning" or first_study == "Hosted":
+        study_clause = "(s.study = 'Morning' OR s.study = 'Hosted')"
+        # For Morning or Hosted, include both types in the export
+        cursor.execute(f"""
+            SELECT s.name, s.major, s.stage, s.study, s.group_name, a.timestamp, CASE WHEN a.attended = 1 THEN 'Yes' ELSE 'No' END AS attended
+            FROM students s
+            LEFT JOIN attendance a ON s.student_id = a.student_id
+            WHERE s.major = ? AND s.stage = ? AND {study_clause} AND s.group_name = ?
+        """, (first_major, first_stage, first_group))
+    else:
+        study_clause = "s.study = ?"
+        cursor.execute(f"""
+            SELECT s.name, s.major, s.stage, s.study, s.group_name, a.timestamp, CASE WHEN a.attended = 1 THEN 'Yes' ELSE 'No' END AS attended
+            FROM students s
+            LEFT JOIN attendance a ON s.student_id = a.student_id
+            WHERE s.major = ? AND s.stage = ? AND {study_clause} AND s.group_name = ?
+        """, (first_major, first_stage, first_study, first_group))
+    
     rows = cursor.fetchall()
     if not rows:
-        messagebox.showwarning("Warning", f"No attendance data found for filters: Major={first_major}, Stage={first_stage}, Study={first_study}, Group={first_group}.")
+        if first_study == "Morning" or first_study == "Hosted":
+            messagebox.showwarning("Warning", f"No attendance data found for filters: Major={first_major}, Stage={first_stage}, Study=Morning/Hosted, Group={first_group}.")
+        else:
+            messagebox.showwarning("Warning", f"No attendance data found for filters: Major={first_major}, Stage={first_stage}, Study={first_study}, Group={first_group}.")
         return
     wb = Workbook()
     ws = wb.active
@@ -271,10 +308,17 @@ def export_attendance():
     ws.append(["Name", "Major", "Stage", "Study", "Group", "Timestamp", "Attended"])
     for row in rows:
         ws.append(row)
+    
+    # Create a more descriptive filename for Morning/Hosted exports
+    if first_study == "Morning" or first_study == "Hosted":
+        study_label = "Morning-Hosted"
+    else:
+        study_label = first_study
+        
     export_file = filedialog.asksaveasfilename(
         defaultextension=".xlsx",
         filetypes=[("Excel Files", "*.xlsx")],
-        initialfile=f"{datetime.now().strftime('%Y-%m-%d')}_{first_major}_{first_stage}_{first_study}_{first_group}"
+        initialfile=f"{datetime.now().strftime('%Y-%m-%d')}_{first_major}_{first_stage}_{study_label}_{first_group}"
     )
     if export_file:
         wb.save(export_file)
@@ -301,131 +345,299 @@ def reset_attendance():
 
 # GUI Setup
 root = tk.Tk()
-root.title("📊 Real-Time Attendance Dashboard")
-root.geometry("1200x1000")
-root.resizable(False, False)
+root.title("📊 Attendance Management System")
+root.geometry("1200x930")
+root.configure(bg="#f0f4f8")
+root.resizable(True, True)
 
-# Styling
+# Modern color scheme
+PRIMARY_COLOR = "#1a73e8"  # Main blue color
+SECONDARY_COLOR = "#4285f4"  # Secondary blue
+ACCENT_COLOR = "#0f9d58"  # Green accent
+WARNING_COLOR = "#ea4335"  # Red for warnings/errors
+DARK_TEXT = "#202124"  # Dark text
+LIGHT_TEXT = "#f1f3f4"  # Light text
+SURFACE_COLOR = "#ffffff"  # White surface
+BORDER_COLOR = "#dadce0"  # Light gray for borders
+HOVER_COLOR = "#e8f0fe"  # Light blue for hover states
+
+# Enhanced styling
 style = ttk.Style()
-style.configure("TLabel", font=("Segoe UI", 12), padding=5)
-style.configure("TButton", font=("Segoe UI", 12), padding=8, relief="flat")
-style.map("TButton", background=[("active", "#219150"), ("pressed", "#1e5dbd")])
-style.configure("Header.TLabel", font=("Segoe UI", 20, "bold"), foreground="#fff", background="#2575fc", padding=10)
-style.configure("Dashboard.TLabel", font=("Segoe UI", 14, "bold"), foreground="#333")
+style.theme_use('clam')  # Use clam theme as base
 
-# Header
-header_frame = tk.Frame(root, bg="#2575fc", height=60)
-header_frame.pack(fill="x")
-ttk.Label(header_frame, text="📊 Real-Time Attendance Dashboard", style="Header.TLabel").pack()
+# Configure TLabel styles
+style.configure("TLabel", font=("Segoe UI", 11), padding=5, background=SURFACE_COLOR)
+style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"), foreground=PRIMARY_COLOR, background=SURFACE_COLOR, padding=10)
+style.configure("Header.TLabel", font=("Segoe UI", 24, "bold"), foreground=LIGHT_TEXT, background=PRIMARY_COLOR, padding=15)
+style.configure("Section.TLabel", font=("Segoe UI", 14, "bold"), foreground=DARK_TEXT, background=SURFACE_COLOR, padding=8)
+style.configure("Dashboard.TLabel", font=("Segoe UI", 16, "bold"), foreground=PRIMARY_COLOR, background=SURFACE_COLOR, padding=10)
 
-# Main Frame
-main_frame = ttk.Frame(root, padding=20)
-main_frame.pack(fill="both", expand=True)
+# Configure button styles
+style.configure("TButton", font=("Segoe UI", 11), padding=8)
+style.map("TButton", background=[("active", HOVER_COLOR), ("pressed", SECONDARY_COLOR)])
 
-# Left Panel (Logos)
-left_panel = ttk.Frame(main_frame)
-left_panel.grid(row=0, column=0, sticky="ns", padx=10, pady=10)
+style.configure("Primary.TButton", font=("Segoe UI", 11, "bold"), background=PRIMARY_COLOR, foreground=LIGHT_TEXT)
+style.map("Primary.TButton", background=[("active", SECONDARY_COLOR), ("pressed", PRIMARY_COLOR)])
 
-# Add Any Logo
+style.configure("Success.TButton", font=("Segoe UI", 11, "bold"), background=ACCENT_COLOR, foreground=LIGHT_TEXT)
+style.map("Success.TButton", background=[("active", "#07875e"), ("pressed", ACCENT_COLOR)])
+
+style.configure("Danger.TButton", font=("Segoe UI", 11, "bold"), background=WARNING_COLOR, foreground=LIGHT_TEXT)
+style.map("Danger.TButton", background=[("active", "#c62828"), ("pressed", WARNING_COLOR)])
+
+# Configure Treeview
+style.configure("Treeview", font=("Segoe UI", 11), rowheight=30, background=SURFACE_COLOR, fieldbackground=SURFACE_COLOR)
+style.configure("Treeview.Heading", font=("Segoe UI", 12, "bold"), background=PRIMARY_COLOR, foreground=LIGHT_TEXT)
+style.map("Treeview", background=[("selected", HOVER_COLOR)], foreground=[("selected", PRIMARY_COLOR)])
+
+# Custom frame class with rounded corners
+class RoundedFrame(tk.Frame):
+    def __init__(self, parent, bg_color=SURFACE_COLOR, corner_radius=10, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.corner_radius = corner_radius
+        self.bg_color = bg_color
+        
+        # Main container
+        self.container = tk.Frame(self, bg=bg_color, highlightbackground=BORDER_COLOR, 
+                                highlightthickness=1, bd=0)
+        self.container.pack(fill="both", expand=True, padx=2, pady=2)
+
+# Create main container with padding
+main_container = tk.Frame(root, bg="#f0f4f8", padx=20, pady=20)
+main_container.pack(fill="both", expand=True)
+
+# Create header with gradient effect
+header_frame = tk.Frame(main_container, bg=PRIMARY_COLOR, height=70)
+header_frame.pack(fill="x", pady=(0, 20))
+
+header_label = tk.Label(header_frame, text="Attendance Management System", 
+                         font=("Segoe UI", 22, "bold"), fg=LIGHT_TEXT, bg=PRIMARY_COLOR)
+header_label.pack(fill="both", expand=True, pady=15)
+
+# Create content area with two columns
+content_frame = tk.Frame(main_container, bg="#f0f4f8")
+content_frame.pack(fill="both", expand=True)
+
+# Left panel (40% width)
+left_panel = RoundedFrame(content_frame, bg_color=SURFACE_COLOR)
+left_panel.pack(side=tk.LEFT, fill="both", expand=False, padx=(0, 10), pady=10)
+
+# Right panel (60% width)
+right_panel = RoundedFrame(content_frame, bg_color=SURFACE_COLOR)
+right_panel.pack(side=tk.RIGHT, fill="both", expand=True, padx=(10, 0), pady=10)
+
+# Left panel content
+left_content = tk.Frame(left_panel.container, bg=SURFACE_COLOR)
+left_content.pack(fill="both", expand=True, padx=15, pady=15)
+
+# Logo section
+logo_frame = tk.Frame(left_content, bg=SURFACE_COLOR)
+logo_frame.pack(fill="x", pady=(0, 20))
+
 try:
-    university_logo = Image.open(resource_path("Any_Image_You_Want.png")).resize((260, 300))
+    university_logo = Image.open(resource_path("Any_logo.png")).resize((200, 220))
     university_logo_img = ImageTk.PhotoImage(university_logo)
-    university_label = ttk.Label(left_panel, image=university_logo_img)
-    university_label.image = university_logo_img
-    university_label.pack(pady=10)
+    logo_label = tk.Label(logo_frame, image=university_logo_img, bg=SURFACE_COLOR)
+    logo_label.image = university_logo_img
+    logo_label.pack(pady=10)
 except Exception as e:
-    print("University logo not found:", e)
-    ttk.Label(left_panel, text="Any_Logo", font=("Segoe UI", 14)).pack(pady=10)
+    print("Logo not found:", e)
+    logo_label = tk.Label(logo_frame, text="University Logo", font=("Segoe UI", 16), bg=SURFACE_COLOR)
+    logo_label.pack(pady=10)
 
-# Add Any Logo
+# Database section
+db_section = tk.Frame(left_content, bg=SURFACE_COLOR)
+db_section.pack(fill="x", pady=15)
+
+db_title = tk.Label(db_section, text="Database Management", font=("Segoe UI", 14, "bold"), 
+                    fg=PRIMARY_COLOR, bg=SURFACE_COLOR)
+db_title.pack(anchor="w", pady=(0, 10))
+
+db_frame = tk.Frame(db_section, bg=SURFACE_COLOR)
+db_frame.pack(fill="x")
+
+db_label = tk.Label(db_frame, text="Select Database:", font=("Segoe UI", 11), bg=SURFACE_COLOR)
+db_label.pack(anchor="w", pady=(5, 8))
+
+# Create a frame for dropdown with border
+dropdown_container = tk.Frame(db_frame, bg=SURFACE_COLOR, highlightbackground=BORDER_COLOR, 
+                           highlightthickness=1, bd=0)
+dropdown_container.pack(fill="x", pady=(0, 10))
+
+db_dropdown = ttk.Combobox(dropdown_container, state="readonly", font=("Segoe UI", 11), width=25)
+db_dropdown.pack(fill="x", padx=2, pady=2)
+populate_db_dropdown()
+db_dropdown.bind("<<ComboboxSelected>>", load_db_from_dropdown)
+
+# Create new database button
+btn_create_db = ttk.Button(db_frame, text="Create New Database", command=create_db, style="Primary.TButton")
+btn_create_db.pack(fill="x", pady=10)
+
+# Ministry logo or second logo
 try:
-    engineering_logo = Image.open(resource_path("Any_Image_You_Want.png")).resize((270, 260))
-    engineering_logo_img = ImageTk.PhotoImage(engineering_logo)
-    engineering_label = ttk.Label(left_panel, image=engineering_logo_img)
-    engineering_label.image = engineering_logo_img
-    engineering_label.pack(pady=10)
+    ministry_logo = Image.open(resource_path("Any_logo2.png")).resize((200, 180))
+    ministry_logo_img = ImageTk.PhotoImage(ministry_logo)
+    ministry_label = tk.Label(left_content, image=ministry_logo_img, bg=SURFACE_COLOR)
+    ministry_label.image = ministry_logo_img
+    ministry_label.pack(pady=15)
 except Exception as e:
-    print("Engineering logo not found:", e)
-    ttk.Label(left_panel, text="Any_Logo", font=("Segoe UI", 14)).pack(pady=10)
+    print("Secondary logo not found:", e)
 
-# Add "Made By Ahmad Tchnology" Label
-made_by_label = ttk.Label(left_panel, text="Made By Ahmad Tchnology", font=("Segoe UI", 12, "italic"), foreground="#555")
-made_by_label.pack(side=tk.BOTTOM, pady=10)
+# Credit label at bottom
+credit_frame = tk.Frame(left_content, bg=SURFACE_COLOR)
+credit_frame.pack(side=tk.BOTTOM, fill="x", pady=15)
 
-# Right Panel (Main Functionality)
-right_panel = ttk.Frame(main_frame)
-right_panel.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+credit_label = tk.Label(credit_frame, text="Developed by Ahmad Tchnology", 
+                       font=("Segoe UI", 10, "italic"), fg="#666", bg=SURFACE_COLOR)
+credit_label.pack(side=tk.BOTTOM)
 
-# Database Selector
-database_frame = ttk.Frame(right_panel)
-database_frame.grid(row=0, column=0, columnspan=2, pady=10)
-ttk.Label(database_frame, text="Select Database:").pack(side=tk.LEFT, padx=5)
+# Right panel content with notebook (tabs)
+right_content = tk.Frame(right_panel.container, bg=SURFACE_COLOR)
+right_content.pack(fill="both", expand=True, padx=15, pady=15)
 
-# Dropdown for Database Selection
-db_dropdown = ttk.Combobox(database_frame, state="readonly", width=30)
-db_dropdown.pack(side=tk.LEFT, padx=5)
-populate_db_dropdown()  # Populate the dropdown with .db files
-db_dropdown.bind("<<ComboboxSelected>>", load_db_from_dropdown)  # Load the selected database
+# Create a notebook (tabbed interface)
+notebook = ttk.Notebook(right_content)
+notebook.pack(fill="both", expand=True)
 
-# Create New Database Button
-btn_create_db = ttk.Button(database_frame, text="Create New Database", command=create_db)
-btn_create_db.pack(side=tk.LEFT, padx=5)
+# Style the notebook
+style.configure("TNotebook", background=SURFACE_COLOR)
+style.configure("TNotebook.Tab", font=("Segoe UI", 11), padding=[15, 5])
+style.map("TNotebook.Tab", background=[("selected", PRIMARY_COLOR)], 
+         foreground=[("selected", LIGHT_TEXT)])
 
-# Student Entry Fields
-entry_frame = ttk.Frame(right_panel)
-entry_frame.grid(row=1, column=0, columnspan=2, pady=10)
-ttk.Label(entry_frame, text="Student ID:").grid(row=0, column=0, sticky=tk.W, pady=5)
-entry_id = ttk.Entry(entry_frame, width=30)
-entry_id.grid(row=0, column=1, pady=5, sticky=tk.W)
-ttk.Label(entry_frame, text="Name:").grid(row=1, column=0, sticky=tk.W, pady=5)
-entry_name = ttk.Entry(entry_frame, width=30)
-entry_name.grid(row=1, column=1, pady=5, sticky=tk.W)
-ttk.Label(entry_frame, text="Major:").grid(row=2, column=0, sticky=tk.W, pady=5)
-entry_major = ttk.Entry(entry_frame, width=30)
-entry_major.grid(row=2, column=1, pady=5, sticky=tk.W)
-ttk.Label(entry_frame, text="Stage:").grid(row=3, column=0, sticky=tk.W, pady=5)
-entry_stage = ttk.Entry(entry_frame, width=30)
-entry_stage.grid(row=3, column=1, pady=5, sticky=tk.W)
-ttk.Label(entry_frame, text="Study:").grid(row=4, column=0, sticky=tk.W, pady=5)
-entry_study = ttk.Entry(entry_frame, width=30)
-entry_study.grid(row=4, column=1, pady=5, sticky=tk.W)
-ttk.Label(entry_frame, text="Group:").grid(row=5, column=0, sticky=tk.W, pady=5)
-entry_group = ttk.Entry(entry_frame, width=30)
-entry_group.grid(row=5, column=1, pady=5, sticky=tk.W)
-btn_add_student = ttk.Button(entry_frame, text="Add Student", command=add_student)
-btn_add_student.grid(row=6, column=0, columnspan=2, pady=10)
+# Create tabs
+student_tab = tk.Frame(notebook, bg=SURFACE_COLOR)
+attendance_tab = tk.Frame(notebook, bg=SURFACE_COLOR)
+
+notebook.add(student_tab, text="Student Management")
+notebook.add(attendance_tab, text="Attendance Recording")
+
+# ====== Student Management Tab ======
+student_frame = tk.Frame(student_tab, bg=SURFACE_COLOR, padx=15, pady=15)
+student_frame.pack(fill="both", expand=True)
+
+student_title = tk.Label(student_frame, text="Add New Student", font=("Segoe UI", 16, "bold"), 
+                        fg=PRIMARY_COLOR, bg=SURFACE_COLOR)
+student_title.pack(anchor="w", pady=(0, 15))
+
+# Create a frame for the student form
+form_frame = tk.Frame(student_frame, bg=SURFACE_COLOR)
+form_frame.pack(fill="both", pady=10)
+
+# Helper function to create form fields
+def create_form_field(parent, row, label_text, widget):
+    field_frame = tk.Frame(parent, bg=SURFACE_COLOR)
+    field_frame.pack(fill="x", pady=8)
+    
+    label = tk.Label(field_frame, text=label_text, font=("Segoe UI", 11), 
+                    width=15, anchor='w', bg=SURFACE_COLOR)
+    label.pack(side=tk.LEFT)
+    
+    input_container = tk.Frame(field_frame, bg=SURFACE_COLOR, highlightbackground=BORDER_COLOR, 
+                             highlightthickness=1, bd=0)
+    input_container.pack(side=tk.LEFT, fill="x", expand=True)
+    
+    widget.configure(font=("Segoe UI", 11))
+    widget.pack(fill="x", padx=2, pady=2)
+    
+    return widget
+
+# Student ID
+entry_id = ttk.Entry(form_frame)
+create_form_field(form_frame, 0, "Student ID:", entry_id)
+
+# Name
+entry_name = ttk.Entry(form_frame)
+create_form_field(form_frame, 1, "Name:", entry_name)
+
+# Major
+entry_major = ttk.Entry(form_frame)
+create_form_field(form_frame, 2, "Major:", entry_major)
+
+# Stage
+entry_stage = ttk.Entry(form_frame)
+create_form_field(form_frame, 3, "Stage:", entry_stage)
+
+# Study
+entry_study = ttk.Combobox(form_frame, values=["Morning", "Evening", "Hosted"])
+create_form_field(form_frame, 4, "Study:", entry_study)
+entry_study.current(0)
+
+# Group
+entry_group = ttk.Entry(form_frame)
+create_form_field(form_frame, 5, "Group:", entry_group)
+
+# Buttons Frame
+buttons_frame = tk.Frame(form_frame, bg=SURFACE_COLOR)
+buttons_frame.pack(fill="x", pady=15)
+
+# Add Student Button
+btn_add_student = ttk.Button(buttons_frame, text="Add Student", command=add_student, style="Primary.TButton")
+btn_add_student.pack(side=tk.LEFT, padx=(0, 10))
 
 # Import Students Button
-btn_import_students = ttk.Button(entry_frame, text="Import Students from Excel", command=import_students_from_excel)
-btn_import_students.grid(row=7, column=0, columnspan=2, pady=10)
+btn_import = ttk.Button(buttons_frame, text="Import from Excel", command=import_students_from_excel, style="Success.TButton")
+btn_import.pack(side=tk.LEFT)
 
-# NFC Entry Field
-nfc_frame = ttk.Frame(right_panel)
-nfc_frame.grid(row=2, column=0, columnspan=2, pady=10)
-ttk.Label(nfc_frame, text="Scan NFC Card:").grid(row=0, column=0, sticky=tk.W, pady=5)
-entry_nfc = ttk.Entry(nfc_frame, width=30)
-entry_nfc.grid(row=0, column=1, pady=5, sticky=tk.W)
+# ====== Attendance Tab ======
+attendance_frame = tk.Frame(attendance_tab, bg=SURFACE_COLOR, padx=15, pady=15)
+attendance_frame.pack(fill="both", expand=True)
+
+attendance_title = tk.Label(attendance_frame, text="NFC Attendance Recording", font=("Segoe UI", 16, "bold"), 
+                          fg=PRIMARY_COLOR, bg=SURFACE_COLOR)
+attendance_title.pack(anchor="w", pady=(0, 15))
+
+# NFC Input section
+nfc_frame = tk.Frame(attendance_frame, bg=SURFACE_COLOR)
+nfc_frame.pack(fill="x", pady=10)
+
+nfc_label = tk.Label(nfc_frame, text="Scan NFC Card:", font=("Segoe UI", 11), bg=SURFACE_COLOR)
+nfc_label.pack(anchor="w", pady=(5, 8))
+
+# Highlighted NFC input field
+nfc_container = tk.Frame(nfc_frame, bg=SURFACE_COLOR, highlightbackground=PRIMARY_COLOR, 
+                        highlightthickness=2, bd=0)
+nfc_container.pack(fill="x", pady=(0, 15))
+
+entry_nfc = ttk.Entry(nfc_container, font=("Segoe UI", 12, "bold"), width=30)
+entry_nfc.pack(fill="x", padx=3, pady=3)
 entry_nfc.bind("<Return>", record_attendance)
+entry_nfc.focus()  # Set focus to the NFC entry field
 
-# Buttons Row (Record, Export, Reset)
-buttons_frame = ttk.Frame(nfc_frame)
-buttons_frame.grid(row=1, column=0, columnspan=2, pady=10)
-btn_record_attendance = ttk.Button(buttons_frame, text="Record Attendance", command=record_attendance)
-btn_record_attendance.pack(side=tk.LEFT, padx=5)
-btn_export_attendance = ttk.Button(buttons_frame, text="📤 Export Attendance", command=export_attendance, style="Green.TButton")
-btn_export_attendance.pack(side=tk.LEFT, padx=5)
-btn_reset_attendance = ttk.Button(buttons_frame, text="🔄 Reset Attendance", command=reset_attendance, style="Red.TButton")
-btn_reset_attendance.pack(side=tk.LEFT, padx=5)
+# Attendance action buttons
+attendance_buttons = tk.Frame(attendance_frame, bg=SURFACE_COLOR)
+attendance_buttons.pack(fill="x", pady=15)
 
-# Button Styles
-style.configure("Green.TButton", background="#27ae60")
-style.configure("Red.TButton", background="#e74c3c")
+btn_record = ttk.Button(attendance_buttons, text="📝 Record Attendance", 
+                       command=record_attendance, style="Primary.TButton")
+btn_record.pack(side=tk.LEFT, padx=(0, 10))
 
-# Dashboard (Treeview to display student names and timestamps)
-dashboard_frame = ttk.Frame(right_panel)
-dashboard_frame.grid(row=3, column=0, columnspan=2, pady=10)
-ttk.Label(dashboard_frame, text="Attendance Dashboard", style="Dashboard.TLabel").pack()
-dashboard_tree = ttk.Treeview(dashboard_frame, columns=("Name", "Major", "Stage", "Study", "Group", "Timestamp", "Attended"), show="headings", height=10)
+btn_export = ttk.Button(attendance_buttons, text="📤 Export to Excel", 
+                       command=export_attendance, style="Success.TButton")
+btn_export.pack(side=tk.LEFT, padx=(0, 10))
+
+btn_reset = ttk.Button(attendance_buttons, text="🔄 Reset Attendance", 
+                      command=reset_attendance, style="Danger.TButton")
+btn_reset.pack(side=tk.LEFT)
+
+# Attendance dashboard
+dashboard_frame = tk.Frame(attendance_frame, bg=SURFACE_COLOR)
+dashboard_frame.pack(fill="both", expand=True, pady=15)
+
+dashboard_label = tk.Label(dashboard_frame, text="Attendance Dashboard", 
+                          font=("Segoe UI", 14, "bold"), fg=PRIMARY_COLOR, bg=SURFACE_COLOR)
+dashboard_label.pack(anchor="w", pady=(0, 10))
+
+# Treeview container with border
+tree_container = tk.Frame(dashboard_frame, bg=SURFACE_COLOR, highlightbackground=BORDER_COLOR, 
+                         highlightthickness=1, bd=0)
+tree_container.pack(fill="both", expand=True)
+
+# Create Treeview
+dashboard_tree = ttk.Treeview(tree_container, columns=("Name", "Major", "Stage", "Study", "Group", "Timestamp", "Attended"), 
+                             show="headings", height=10)
+
+# Set column headings
 dashboard_tree.heading("Name", text="Name")
 dashboard_tree.heading("Major", text="Major")
 dashboard_tree.heading("Stage", text="Stage")
@@ -433,14 +645,23 @@ dashboard_tree.heading("Study", text="Study")
 dashboard_tree.heading("Group", text="Group")
 dashboard_tree.heading("Timestamp", text="Timestamp")
 dashboard_tree.heading("Attended", text="Attended")
+
+# Set column widths
 dashboard_tree.column("Name", width=150)
-dashboard_tree.column("Major", width=100)
-dashboard_tree.column("Stage", width=100)
+dashboard_tree.column("Major", width=120)
+dashboard_tree.column("Stage", width=80)
 dashboard_tree.column("Study", width=100)
-dashboard_tree.column("Group", width=100)
-dashboard_tree.column("Timestamp", width=150)
-dashboard_tree.column("Attended", width=100)
-dashboard_tree.pack()
+dashboard_tree.column("Group", width=80)
+dashboard_tree.column("Timestamp", width=140)
+dashboard_tree.column("Attended", width=80)
+
+# Pack the treeview with scrollbar
+dashboard_tree.pack(side=tk.LEFT, fill="both", expand=True, padx=1, pady=1)
+
+# Add scrollbar
+scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=dashboard_tree.yview)
+dashboard_tree.configure(yscrollcommand=scrollbar.set)
+scrollbar.pack(side=tk.RIGHT, fill="y")
 
 # Run the application
 root.mainloop()

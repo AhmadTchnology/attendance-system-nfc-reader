@@ -1,0 +1,49 @@
+======================================================
+ATTENDANCE MANAGEMENT SYSTEM - USER GUIDE
+======================================================
+Developed by Ahmad Tchnology
+
+QUICK START GUIDE
+------------------------------------------------------
+
+1. INSTALLATION
+   - No installation required! Just run the "Attendance_System_Ahmad_Tchnology.exe" file.
+   - On first run, the program will automatically create a "Students Databases" folder.
+
+2. DATABASE MANAGEMENT
+   - Click "Create New Database" to create a new database file for a class/course.
+   - All database files are stored in the "Students Databases" folder.
+   - Select an existing database from the dropdown to work with it.
+
+3. ADDING STUDENTS
+   - Go to the "Student Management" tab
+   - Fill in all required fields (Student ID, Name, Major, Stage, Study, Group)
+   - Click "Add Student" to add a student individually
+   - Or use "Import from Excel" to import multiple students at once
+     (Excel file must have columns in this order: ID, Name, Major, Stage, Study, Group)
+
+4. RECORDING ATTENDANCE
+   - Go to the "Attendance Recording" tab
+   - Enter the student's NFC card ID in the "Scan NFC Card" field and press Enter
+   - The first student who taps their card sets the filters for subsequent students
+   - Students must match the Major, Stage, and Group of the first student
+   - Morning and Hosted students can attend the same session
+
+5. EXPORTING ATTENDANCE
+   - Click "Export to Excel" to generate an Excel file with attendance records
+   - Choose where to save the file
+   - The file will include all students that match the current filters
+
+6. RESETTING ATTENDANCE
+   - Click "Reset Attendance" to clear all attendance records and filters
+   - This allows you to start a new attendance session
+
+NOTES
+------------------------------------------------------
+- The system automatically creates the "Students Databases" folder on first run
+- All databases are stored in this folder for easy organization
+- Each database can store multiple classes/groups of students
+- Each time you record attendance, the system checks if the student matches the filters
+- Students can only be marked as present once per day
+
+For any issues or questions, please contact Ahmad Tchnology. 

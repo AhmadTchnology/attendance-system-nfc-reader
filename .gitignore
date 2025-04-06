@@ -3,36 +3,68 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# C extensions
-*.so
-
 # Distribution / packaging
 dist/
 build/
-*.egg-info/
+*.spec
 
-# Virtual environments
+# Images (except placeholders)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.ico
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Excel files
+*.xls
+*.xlsx
+*.xlsm
+*.xlsb
+
+# Environment variables
+.env
+
+# Virtual Environment
 venv/
 env/
 ENV/
 
-# Development environment specific files
+# PyCharm files
 .idea/
+
+# VS Code files
 .vscode/
+
+# Other
+.DS_Store
+Thumbs.db
+
+# Students Database folder
+Students Databases/
+
+# Exceptions (Don't ignore these files)
+!attendance_system.spec
+
+# C extensions
+*.so
+
+# Development environment specific files
 *.swp
 *.swo
 
-# Database files
-# Uncomment the following line if you don't want to include database files
-# *.db
-
 # Local configuration
 instance/
-.env
 
 # System files
-.DS_Store
-Thumbs.db
+# Uncomment the following line if you don't want to include system files
+# .DS_Store
+# Thumbs.db
 
 # Exported attendance data
 # Uncomment if you don't want to track exported attendance data
